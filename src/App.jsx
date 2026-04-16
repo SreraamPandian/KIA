@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   LayoutDashboard, PlusCircle, FileText, Car, Users, 
   Clock, Navigation, Download, Search, CheckCircle2, 
@@ -32,12 +33,43 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 const CustomSelect = ({ value, onChange, options, placeholder, className }) => {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
+  const dropdownRef = useRef(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
 
   useEffect(() => {
-    const handleClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setIsOpen(false); };
+    const handleClick = (e) => { 
+      if (ref.current && !ref.current.contains(e.target) && 
+          (!dropdownRef.current || !dropdownRef.current.contains(e.target))) {
+        setIsOpen(false); 
+      }
+    };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  useEffect(() => {
+    if (isOpen && ref.current) {
+       const rect = ref.current.getBoundingClientRect();
+       setCoords({
+         top: rect.bottom + window.scrollY,
+         left: rect.left + window.scrollX,
+         width: rect.width
+       });
+       
+       const handleScroll = () => {
+         if (isOpen && ref.current) {
+            const newRect = ref.current.getBoundingClientRect();
+            setCoords({
+               top: newRect.bottom + window.scrollY,
+               left: newRect.left + window.scrollX,
+               width: newRect.width
+            });
+         }
+       };
+       window.addEventListener('scroll', handleScroll, true);
+       return () => window.removeEventListener('scroll', handleScroll, true);
+    }
+  }, [isOpen]);
 
   const selectedOption = options.find(o => o.value === value);
 
@@ -50,8 +82,11 @@ const CustomSelect = ({ value, onChange, options, placeholder, className }) => {
         <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 flex-shrink-0 ${isOpen ? 'rotate-180' : 'rotate-0'}`} />
       </div>
       
-      {isOpen && (
-        <div className="absolute top-[105%] left-0 w-full bg-white backdrop-blur-5xl border border-slate-200 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.15)] rounded-2xl z-[150] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 p-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+      {isOpen && createPortal(
+        <div 
+          ref={dropdownRef}
+          style={{ top: coords.top + 4, left: coords.left, width: coords.width }}
+          className="absolute bg-white backdrop-blur-5xl border border-slate-200 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.15)] rounded-2xl z-[9999] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 p-2 max-h-[300px] overflow-y-auto custom-scrollbar">
           {options.length > 0 ? options.map((opt, i) => (
             <div 
               key={i} 
@@ -67,7 +102,8 @@ const CustomSelect = ({ value, onChange, options, placeholder, className }) => {
           )) : (
             <div className="px-4 py-3 text-xs text-slate-400 italic text-center">No options available</div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -92,17 +128,20 @@ const App = () => {
   const [records, setRecords] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Modals & Form States
   const [showVehicleModal, setShowVehicleModal] = useState(false);
   const [showDriverModal, setShowDriverModal] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
   
   const [editingRecordId, setEditingRecordId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
 
   const [newVehicle, setNewVehicle] = useState({ name: '', plate: '', currentMeter: '' });
   const [newDriver, setNewDriver] = useState({ name: '', phone: '' });
+  const [newLocation, setNewLocation] = useState({ name: '' });
 
   const [formData, setFormData] = useState({ 
     customerName: '', phone: '', vehicle: '', meterStart: '', fromLocation: '', toLocation: '', driverName: '' 
@@ -111,6 +150,20 @@ const App = () => {
 
   // Local Data Sync & Dummy Seeding
   useEffect(() => {
+    const savedVehicles = localStorage.getItem('kia_vehicles');
+    const savedDrivers = localStorage.getItem('kia_drivers');
+    const savedLocations = localStorage.getItem('kia_locations');
+    const savedRecords = localStorage.getItem('kia_records');
+
+    if (savedVehicles && savedDrivers && savedLocations && savedRecords) {
+        setVehicles(JSON.parse(savedVehicles));
+        setDrivers(JSON.parse(savedDrivers));
+        setLocations(JSON.parse(savedLocations));
+        setRecords(JSON.parse(savedRecords));
+        setLoading(false);
+        return;
+    }
+
     const initialVehicles = [
       { id: 'v1', name: 'Nexon EV Dark', plate: 'KA-01-EV-1234', currentMeter: 1250 },
       { id: 'v2', name: 'Safari Adventure', plate: 'MH-12-SA-9988', currentMeter: 4500 },
@@ -122,6 +175,13 @@ const App = () => {
       { id: 'd1', name: 'Rajesh K.', phone: '9876543210' }, 
       { id: 'd2', name: 'Suresh M.', phone: '9123456789' },
       { id: 'd3', name: 'Anita P.', phone: '9000100020' }
+    ];
+
+    const initialLocations = [
+      { id: 'l1', name: 'Showroom' },
+      { id: 'l2', name: 'City Center' },
+      { id: 'l3', name: 'Highway Check' },
+      { id: 'l4', name: 'Industrial Area' }
     ];
 
     const initialHistory = [];
@@ -168,9 +228,22 @@ const App = () => {
 
     setVehicles(initialVehicles);
     setDrivers(initialDrivers);
+    setLocations(initialLocations);
     setRecords(initialHistory);
+    
+    localStorage.setItem('kia_vehicles', JSON.stringify(initialVehicles));
+    localStorage.setItem('kia_drivers', JSON.stringify(initialDrivers));
+    localStorage.setItem('kia_locations', JSON.stringify(initialLocations));
+    localStorage.setItem('kia_records', JSON.stringify(initialHistory));
+
     setLoading(false);
   }, []);
+
+  // Sync to localstorage
+  useEffect(() => { if (!loading) localStorage.setItem('kia_vehicles', JSON.stringify(vehicles)); }, [vehicles, loading]);
+  useEffect(() => { if (!loading) localStorage.setItem('kia_drivers', JSON.stringify(drivers)); }, [drivers, loading]);
+  useEffect(() => { if (!loading) localStorage.setItem('kia_locations', JSON.stringify(locations)); }, [locations, loading]);
+  useEffect(() => { if (!loading) localStorage.setItem('kia_records', JSON.stringify(records)); }, [records, loading]);
 
   const stats = useMemo(() => {
     const today = new Date().toLocaleDateString();
@@ -229,6 +302,17 @@ const App = () => {
     setDrivers(prev => [...prev, newD]);
     setNewDriver({ name: '', phone: '' });
     setShowDriverModal(false);
+  };
+
+  const handleAddLocation = () => {
+    if (!newLocation.name) return;
+    const newL = {
+      ...newLocation,
+      id: `l-${Date.now()}`
+    };
+    setLocations(prev => [...prev, newL]);
+    setNewLocation({ name: '' });
+    setShowLocationModal(false);
   };
 
   const handleEditRecord = (record) => {
@@ -309,12 +393,13 @@ const App = () => {
         <div className="flex-1 flex flex-col min-h-0 w-full overflow-hidden pb-1">
           {activeTab === 'dashboard' && (
             <div className="flex-1 flex flex-col gap-4 lg:gap-5 animate-in fade-in duration-500 w-full h-full min-h-0">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5 flex-shrink-0">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-5 flex-shrink-0">
                 {[
                   { label: 'Today Dispatches', val: stats.todayCount, icon: <Users />, color: 'text-blue-500', bg: 'bg-blue-50' },
                   { label: 'Vehicles Out', val: stats.activeCount, icon: <Navigation />, color: 'text-amber-500', bg: 'bg-amber-50' },
                   { label: 'Total Test KM', val: stats.totalKM.toFixed(0), icon: <Gauge />, color: 'text-emerald-500', bg: 'bg-emerald-50' },
                   { label: 'Fleet Access', val: vehicles.length, icon: <Car />, color: 'text-purple-500', bg: 'bg-purple-50' },
+                  { label: 'Locations', val: locations.length, icon: <MapPin />, color: 'text-rose-500', bg: 'bg-rose-50' },
                 ].map((s, i) => (
                   <div key={i} className={`${glassCard} p-4 lg:p-5 rounded-[1.5rem] flex items-center gap-4 hover:scale-[1.01] transition-transform w-full`}>
                     <div className={`p-3 lg:p-4 rounded-xl ${s.bg} ${s.color} hidden sm:block`}>{React.cloneElement(s.icon, { size: 24 })}</div>
@@ -390,8 +475,20 @@ const App = () => {
                   />
 
                   <input className={`${glassInput} bg-slate-50 border-transparent text-slate-500`} placeholder="Start Meter (Auto-filled)" value={formData.meterStart} readOnly />
-                  <input className={glassInput} placeholder="Pickup Location (Optional)" value={formData.fromLocation} onChange={e => setFormData({...formData, fromLocation: e.target.value})} />
-                  <input className={glassInput} placeholder="Destination (Optional)" value={formData.toLocation} onChange={e => setFormData({...formData, toLocation: e.target.value})} />
+                  <CustomSelect 
+                    className={glassInput}
+                    value={formData.fromLocation}
+                    onChange={e => setFormData({...formData, fromLocation: e.target.value})}
+                    options={locations.map(l => ({ value: l.name, label: l.name }))}
+                    placeholder="Pickup Location (Optional)"
+                  />
+                  <CustomSelect 
+                    className={glassInput}
+                    value={formData.toLocation}
+                    onChange={e => setFormData({...formData, toLocation: e.target.value})}
+                    options={locations.map(l => ({ value: l.name, label: l.name }))}
+                    placeholder="Destination (Optional)"
+                  />
                   
                   <CustomSelect 
                     className={glassInput}
@@ -465,8 +562,20 @@ const App = () => {
                           <td className="px-5 py-3 align-middle">
                             {editingRecordId === r.id ? (
                                <div className="flex flex-col gap-2 min-w-[120px]">
-                                 <input className={`${glassInput} py-2 px-3 text-[10px]`} placeholder="From Location" value={editFormData.fromLocation || ''} onChange={e => setEditFormData({...editFormData, fromLocation: e.target.value})} />
-                                 <input className={`${glassInput} py-2 px-3 text-[10px]`} placeholder="To Destination" value={editFormData.toLocation || ''} onChange={e => setEditFormData({...editFormData, toLocation: e.target.value})} />
+                                 <CustomSelect 
+                                    className={`${glassInput} py-2 px-3 text-[10px]`}
+                                    value={editFormData.fromLocation}
+                                    onChange={e => setEditFormData({...editFormData, fromLocation: e.target.value})}
+                                    options={locations.map(l => ({ value: l.name, label: l.name }))}
+                                    placeholder="From Location"
+                                 />
+                                 <CustomSelect 
+                                    className={`${glassInput} py-2 px-3 text-[10px]`}
+                                    value={editFormData.toLocation}
+                                    onChange={e => setEditFormData({...editFormData, toLocation: e.target.value})}
+                                    options={locations.map(l => ({ value: l.name, label: l.name }))}
+                                    placeholder="To Destination"
+                                 />
                                </div>
                             ) : (
                                <div className="space-y-1.5">
@@ -623,8 +732,20 @@ const App = () => {
                           <td className="px-5 py-3 align-middle text-slate-600 font-bold text-[9px] uppercase tracking-wider min-w-[120px]">
                              {editingRecordId === r.id ? (
                                 <div className="flex flex-col gap-2">
-                                  <input className={`${glassInput} py-2 px-3 text-[10px]`} placeholder="From" value={editFormData.fromLocation || ''} onChange={e => setEditFormData({...editFormData, fromLocation: e.target.value})} />
-                                  <input className={`${glassInput} py-2 px-3 text-[10px]`} placeholder="To" value={editFormData.toLocation || ''} onChange={e => setEditFormData({...editFormData, toLocation: e.target.value})} />
+                                  <CustomSelect 
+                                     className={`${glassInput} py-2 px-3 text-[10px]`}
+                                     value={editFormData.fromLocation}
+                                     onChange={e => setEditFormData({...editFormData, fromLocation: e.target.value})}
+                                     options={locations.map(l => ({ value: l.name, label: l.name }))}
+                                     placeholder="From"
+                                  />
+                                  <CustomSelect 
+                                     className={`${glassInput} py-2 px-3 text-[10px]`}
+                                     value={editFormData.toLocation}
+                                     onChange={e => setEditFormData({...editFormData, toLocation: e.target.value})}
+                                     options={locations.map(l => ({ value: l.name, label: l.name }))}
+                                     placeholder="To"
+                                  />
                                 </div>
                              ) : (
                                <div className="flex flex-col gap-1.5 pt-0.5 border-l-2 border-slate-200 pl-2">
@@ -691,7 +812,7 @@ const App = () => {
           )}
 
           {activeTab === 'masters' && (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 lg:gap-5 flex-1 min-h-0 animate-in fade-in duration-500 w-full h-full pb-1">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-5 flex-1 min-h-0 animate-in fade-in duration-500 w-full h-full pb-1">
                <div className={`${glassCard} rounded-[1.5rem] p-5 lg:p-7 flex flex-col border-t-[4px] border-t-blue-500 w-full h-full min-h-0`}>
                   <div className="flex justify-between items-center mb-5 flex-shrink-0">
                     <div>
@@ -750,9 +871,43 @@ const App = () => {
                     ))}
                   </div>
                </div>
+
+               <div className={`${glassCard} rounded-[1.5rem] p-5 lg:p-7 flex flex-col border-t-[4px] border-t-rose-500 w-full h-full min-h-0`}>
+                  <div className="flex justify-between items-center mb-5 flex-shrink-0">
+                    <div>
+                      <h3 className="text-xs lg:text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-0.5"><MapPin size={16} className="text-rose-500"/> Locations</h3>
+                      <p className="text-[9px] font-bold text-slate-400">Manage common driving routes</p>
+                    </div>
+                    <button onClick={() => setShowLocationModal(true)} className={`${glassButton} bg-white text-slate-800 border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 h-[36px] px-4 text-[9px] py-1`}>
+                      <PlusCircle size={14}/> Add Location
+                    </button>
+                  </div>
+                  <div className="space-y-3 overflow-y-auto flex-1 pr-2 custom-scrollbar min-h-0">
+                    {locations.map((l) => (
+                      <div key={l.id} className="p-4 lg:p-5 rounded-2xl bg-white border border-slate-100 flex justify-between items-center hover:shadow-sm transition-shadow">
+                        <div className="flex items-center gap-3">
+                           <div className="w-9 h-9 bg-gradient-to-br from-rose-50 to-rose-100 rounded-[10px] flex items-center justify-center text-rose-600 shadow-inner flex-shrink-0">
+                             <MapPin size={16}/>
+                           </div>
+                           <p className="font-black text-slate-800 text-xs tracking-tight truncate">{l.name}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+               </div>
             </div>
           )}
         </div>
+
+        <Modal isOpen={showLocationModal} onClose={() => setShowLocationModal(false)} title="Register New Location">
+           <div className="space-y-4">
+             <div>
+               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 mb-2 block">Location Name</label>
+               <input className={glassInput} placeholder="Enter location name" value={newLocation.name} onChange={e => setNewLocation({...newLocation, name: e.target.value})} />
+             </div>
+             <button onClick={handleAddLocation} className={`${glassButton} bg-rose-500 hover:bg-rose-600 text-white w-full mt-2 h-12 shadow-rose-200 text-xs`}>Add Location</button>
+           </div>
+        </Modal>
 
         <Modal isOpen={showVehicleModal} onClose={() => setShowVehicleModal(false)} title="Register New Vehicle">
            <div className="space-y-4">
