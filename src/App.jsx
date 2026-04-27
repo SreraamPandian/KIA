@@ -144,7 +144,7 @@ const App = () => {
   const [newLocation, setNewLocation] = useState({ name: '' });
 
   const [formData, setFormData] = useState({ 
-    customerName: '', phone: '', vehicle: '', meterStart: '', fromLocation: '', toLocation: '', driverName: '' 
+    customerName: '', phone: '', vehicle: '', meterStart: '', fromLocation: '', toLocation: '', driverName: '', date: new Date().toISOString().split('T')[0]
   });
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -263,22 +263,26 @@ const App = () => {
     e.preventDefault();
     if (!formData.vehicle) return;
     
-    const v = vehicles.find(veh => veh.name === formData.vehicle);
+    let localDateStr = new Date().toLocaleDateString();
+    if (formData.date) {
+      const [year, month, day] = formData.date.split('-');
+      localDateStr = new Date(year, month - 1, day).toLocaleDateString();
+    }
     
     const newRecord = {
       ...formData,
       id: `rec-${Date.now()}`,
-      meterStart: v ? v.currentMeter : formData.meterStart,
+      meterStart: formData.meterStart,
       status: 'Active',
       startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       endTime: '',
       totalKM: 0,
       createdAt: Date.now(),
-      date: new Date().toLocaleDateString()
+      date: localDateStr
     };
     
     setRecords(prev => [newRecord, ...prev]);
-    setFormData({ customerName: '', phone: '', vehicle: '', meterStart: '', fromLocation: '', toLocation: '', driverName: '' });
+    setFormData({ customerName: '', phone: '', vehicle: '', meterStart: '', fromLocation: '', toLocation: '', driverName: '', date: new Date().toISOString().split('T')[0] });
   };
 
   const handleAddVehicle = () => {
@@ -459,6 +463,7 @@ const App = () => {
                   <PlusCircle size={16} className="text-blue-600" /> New Dispatch Request
                 </h3>
                 <form onSubmit={handleStartDrive} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 w-full">
+                  <input type="date" className={glassInput} value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />
                   <input className={glassInput} placeholder="Customer Name" value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} required />
                   <input className={glassInput} placeholder="Contact Number" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} required />
                   
@@ -474,21 +479,21 @@ const App = () => {
                     placeholder="Select Vehicle"
                   />
 
-                  <input className={`${glassInput} bg-slate-50 border-transparent text-slate-500`} placeholder="Start Meter (Auto-filled)" value={formData.meterStart} readOnly />
-                  <CustomSelect 
-                    className={glassInput}
-                    value={formData.fromLocation}
-                    onChange={e => setFormData({...formData, fromLocation: e.target.value})}
-                    options={locations.map(l => ({ value: l.name, label: l.name }))}
-                    placeholder="Pickup Location (Optional)"
-                  />
-                  <CustomSelect 
-                    className={glassInput}
-                    value={formData.toLocation}
-                    onChange={e => setFormData({...formData, toLocation: e.target.value})}
-                    options={locations.map(l => ({ value: l.name, label: l.name }))}
-                    placeholder="Destination (Optional)"
-                  />
+                  <input type="number" className={glassInput} placeholder="Start Meter" value={formData.meterStart} onChange={e => setFormData({...formData, meterStart: e.target.value})} required />
+                  
+                  <div className="relative w-full">
+                    <input list="from-locations" className={glassInput} placeholder="Pickup Location (Optional)" value={formData.fromLocation} onChange={e => setFormData({...formData, fromLocation: e.target.value})} />
+                    <datalist id="from-locations">
+                      {locations.map(l => <option key={l.id} value={l.name} />)}
+                    </datalist>
+                  </div>
+                  
+                  <div className="relative w-full">
+                    <input list="to-locations" className={glassInput} placeholder="Destination (Optional)" value={formData.toLocation} onChange={e => setFormData({...formData, toLocation: e.target.value})} />
+                    <datalist id="to-locations">
+                      {locations.map(l => <option key={l.id} value={l.name} />)}
+                    </datalist>
+                  </div>
                   
                   <CustomSelect 
                     className={glassInput}
@@ -498,7 +503,7 @@ const App = () => {
                     placeholder="Assigned Staff"
                   />
 
-                  <button type="submit" className={`${glassButton} bg-slate-900 text-white w-full h-full min-h-[44px] hover:bg-slate-800 text-xs`}>Authorize</button>
+                  <button type="submit" className={`${glassButton} bg-slate-900 text-white w-full h-full min-h-[44px] hover:bg-slate-800 text-xs sm:col-span-2 xl:col-span-4`}>Authorize</button>
                 </form>
               </div>
 
